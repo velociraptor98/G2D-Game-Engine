@@ -3,6 +3,7 @@
 #include <SDL2/SDL.h>
 #include<SDL2/SDL_image.h>
 #include<SDL2/SDL_ttf.h>
+#include "../lib/glm/glm.hpp"
 
 class Game
 {
@@ -11,6 +12,7 @@ class Game
     SDL_Window* window;
     SDL_Renderer* renderer;
     public:
+    int ticksLastFrame;
     Game();
     ~Game();
     bool IsRunning() const;
