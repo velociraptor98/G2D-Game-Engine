@@ -1,6 +1,7 @@
 #include "./Game.h"
 #include "./Constants.h"
 #include <iostream>
+#include "./Components/TransformComponent.h"
 
 EntityManager manager;
 SDL_Renderer* Game::renderer;
@@ -44,8 +45,15 @@ void Game::init(int width,int height)
     {
         std::cerr<<"Failed to create renderer"<<std::endl;
     }
+    LoadLevel(0);
     isRunning = true;
     return;
+}
+
+void Game::LoadLevel(int levelNumber)
+{
+    Entity& newEntity(manager.AddEntity("test"));
+    newEntity.AddComponents<TransformComponent>(0,0,20,20,32,32,1);
 }
 void Game::ProcessInput()
 {
@@ -78,15 +86,18 @@ void Game::Update()
     //Clamping the delta time 
     deltaTime = (deltaTime>0.05f)?0.05f : deltaTime;
     ticksLastFrame = SDL_GetTicks();
-    projectilePos =glm::vec2(projectilePos.x+(projectileVel.x * deltaTime),(projectileVel.y*deltaTime)+projectilePos.y);
+    manager.Update(deltaTime);
+
 }
 void Game::Render()
 {
     SDL_SetRenderDrawColor(renderer,21,21,21,255);
     SDL_RenderClear(renderer);
-    SDL_Rect projectile {(int)projectilePos.x,(int)projectilePos.y,10,10};
-    SDL_SetRenderDrawColor(renderer,255,255,255,255);
-    SDL_RenderFillRect(renderer,&projectile);
+    if(manager.hasEntities() == false)
+    {
+        return;
+    }
+    manager.Render();
     SDL_RenderPresent(renderer);
 }
 void Game::Destroy()
