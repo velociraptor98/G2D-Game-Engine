@@ -2,8 +2,10 @@
 #define ENTITY_H
 #include <vector>
 #include <string>
-class Component;
+#include "./EntityManager.h"
+#include "./Component.h"
 class EntityManager;
+class Component;
 class Entity
 {
     private:
@@ -17,6 +19,6 @@ class Entity
     void Update(float deltaTime);
     void Render();
     void Destroy();
-    bool IsActive();
-}
+    bool IsActive() const;
+};
 #endif

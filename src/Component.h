@@ -9,5 +9,5 @@ class Component
     virtual void init();
     virtual void Update(float deltaTime);
     virtual void Render();
-}
+};
 #endif

@@ -1,6 +1,9 @@
 #include "./Game.h"
 #include "./Constants.h"
 #include <iostream>
+
+EntityManager manager;
+SDL_Renderer* Game::renderer;
 Game::Game()
 {
     (*this).isRunning = false; 
