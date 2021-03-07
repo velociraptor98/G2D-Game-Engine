@@ -33,7 +33,7 @@ public:
         return *newComponent;
     }
     template <typename T>
-    T* &getComponent()
+    T* getComponent()
     {
         return static_cast<T*>(componentTypeMap[&typeid(T)]);
     }
