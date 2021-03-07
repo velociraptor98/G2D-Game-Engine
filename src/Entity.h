@@ -5,6 +5,7 @@
 #include "./EntityManager.h"
 #include "./Component.h"
 #include <map>
+#include <iostream>
 class EntityManager;
 class Component;
 class Entity
@@ -36,6 +37,16 @@ public:
     T* getComponent()
     {
         return static_cast<T*>(componentTypeMap[&typeid(T)]);
+    }
+    void getAllComponents(){
+        // use the component map for entities
+        for(auto const& x : componentTypeMap){
+            std::cout<<x.first<<" : "<<x.second<<std::endl;
+        }
+    }
+    template <typename T>
+    bool hasComponent() const{
+        return componentTypeMap.count(&typeid(T));
     }
 };
 #endif
