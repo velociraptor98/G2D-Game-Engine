@@ -5,7 +5,7 @@
 #include<SDL2/SDL_ttf.h>
 #include "../lib/glm/glm.hpp"
 #include "./EntityManager.h"
-
+class AssetManager;
 class Game
 {
     private:
@@ -15,6 +15,7 @@ class Game
     public:
     static SDL_Renderer* renderer;
     int ticksLastFrame;
+    static AssetManager* assetManager;
     Game();
     ~Game();
     bool IsRunning() const;
