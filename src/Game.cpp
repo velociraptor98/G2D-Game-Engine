@@ -56,11 +56,18 @@ void Game::LoadLevel(int levelNumber)
 {
     //Load Assets
     std::string textureFilePath = "./assets/images/tank-big-right.png";
+    // Can be added to single line
     assetManager->addTexture("tank-image",textureFilePath.c_str());
+    assetManager->addTexture("chopper-image",std::string("./assets/images/chopper-spritesheet.png").c_str());
     // Include entities and components
-    Entity& newEntity(manager.AddEntity("tank"));
-    newEntity.AddComponents<TransformComponent>(0,0,20,20,32,32,1);
-    newEntity.AddComponents<SpriteComponent>("tank-image");
+    Entity& tankEntity(manager.AddEntity("tank"));
+    tankEntity.AddComponents<TransformComponent>(0,0,20,20,32,32,1);
+    tankEntity.AddComponents<SpriteComponent>("tank-image");
+    //chopper entity
+    Entity& chopperEntity(manager.AddEntity("chopper"));
+    chopperEntity.AddComponents<TransformComponent>(240,106,20,20,32,32,1);
+    chopperEntity.AddComponents<SpriteComponent>("chopper-image");
+    //Just for debugging purposes
 }
 void Game::ProcessInput()
 {

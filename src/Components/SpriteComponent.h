@@ -11,6 +11,13 @@ class SpriteComponent : public Component {
     SDL_Texture* texture;
     SDL_Rect sourceRectangle;
     SDL_Rect destinationRectangle;
+    bool isAnimated;
+    int numFrame;
+    int animationSpeed;
+    bool isFixed;
+    std::map<std::string,Animation> animations;
+    std::string currentAnimationName;
+    unsigned int animationIndex;
     public:
     SDL_RendererFlip spriteFlip = SDL_FLIP_NONE;
     SpriteComponent(const char* filePath){
