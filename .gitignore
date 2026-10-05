@@ -1,4 +1,6 @@
-game
+/g2d
+/extension_demo
+/run_tests
+/build/
 *.dSYM/
 .DS_Store
-run_tests

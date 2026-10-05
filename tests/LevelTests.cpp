@@ -2,7 +2,7 @@
 #include "./SDLTestHelpers.h"
 #include <fstream>
 #include <sstream>
-#include "LevelLoader.h"
+#include "Scene/TileMap.h"
 #include "Components/TransformComponent.h"
 #include "Components/SpriteComponent.h"
 #include "Components/CameraFollowComponent.h"
@@ -98,7 +98,7 @@ TEST(CreateTileEntitiesPlacesScaledTilesWithTheirSourceRects)
     REQUIRE(Parse("00,21\n13,02\n", map, error));
     Registry registry;
     auto &render = registry.AddSystem<RenderSystem>();
-    LevelLoader::CreateTileEntities(map, "tiles", 32, 2.0f, registry);
+    CreateTileEntities(map, "tiles", 32, 2.0f, registry);
     registry.Update();
     REQUIRE(render.GetEntities().size() == 4u);
     Entity last = render.GetEntities()[3];

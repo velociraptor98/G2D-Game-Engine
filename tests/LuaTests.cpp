@@ -1,11 +1,12 @@
 #include "./TestFramework.h"
 #include "./SDLTestHelpers.h"
+#include "./EngineTestHelpers.h"
 #include <iostream>
 #include <lua.hpp>
 #include <sstream>
 #include "ECS/ECS.h"
-#include "AssetManager.h"
-#include "LevelLoader.h"
+#include "Assets/AssetManager.h"
+#include "Scene/SceneLoader.h"
 #include "Scripting/LuaBindings.h"
 #include "Components/TransformComponent.h"
 #include "Components/RigidBodyComponent.h"
@@ -14,19 +15,11 @@
 #include "Components/TextLabelComponent.h"
 #include "Components/ScriptComponent.h"
 #include "Components/ProjectileEmitterComponent.h"
+#include "Components/SolidComponent.h"
 #include "Systems/ScriptSystem.h"
 
 namespace
 {
-    // Captures everything written to std::cerr while alive.
-    struct CapturedErrors
-    {
-        std::ostringstream text;
-        std::streambuf *previous = std::cerr.rdbuf(text.rdbuf());
-        ~CapturedErrors() { std::cerr.rdbuf(previous); }
-        std::string str() const { return text.str(); }
-    };
-
     struct LuaWorld
     {
         DummyAudio audio;
@@ -35,7 +28,8 @@ namespace
         SoftwareRenderTarget target{8, 8};
         lua_State *lua = luaL_newstate();
         ScriptSystem *scripts = nullptr;
-        LevelInfo level;
+        SceneInfo level;
+        SceneLoader loader;
 
         LuaWorld()
         {
@@ -56,7 +50,7 @@ namespace
                 lua_pop(lua, 1);
                 return false;
             }
-            const bool loaded = LevelLoader::LoadLevelFromLua(lua, registry, assets, target.Renderer(), level);
+            const bool loaded = loader.LoadFromGlobal(lua, registry, assets, target.Renderer(), level);
             registry.Update();
             return loaded;
         }
@@ -86,16 +80,30 @@ namespace
     };
 }
 
+namespace
+{
+    class SpriteCounter : public System
+    {
+    public:
+        SpriteCounter() { RequireComponent<SpriteComponent>(); }
+    };
+    class SolidCounter : public System
+    {
+    public:
+        SolidCounter() { RequireComponent<SolidComponent>(); }
+    };
+}
+
 TEST(LuaLevelCreatesEntitiesWithTheirComponentsTagsAndGroups)
 {
     LuaWorld world;
     REQUIRE(world.Load(R"(
-        Level = { entities = {
+        Scene = { entities = {
             { tag = "player", components = {
                 transform = { position = { x = 10, y = 20 }, scale = { x = 2, y = 3 }, rotation = 45 },
                 rigidbody = { velocity = { x = 5, y = -5 } },
                 sprite = { texture_id = "chopper", width = 32, height = 16, z_index = 3, src_rect_y = 16 },
-                health = { health_percentage = 80 },
+                health = { health = 80, max_health = 120 },
             } },
             { group = "enemies", components = { health = {} } },
             { components = { text_label = { text = "HI", font_id = "f", color = { r = 1, g = 2, b = 3 } } } },
@@ -113,27 +121,29 @@ TEST(LuaLevelCreatesEntitiesWithTheirComponentsTagsAndGroups)
     CHECK_EQ(sprite.height, 16);
     CHECK_EQ(sprite.zIndex, 3);
     CHECK_EQ(sprite.srcRect.y, 16);
-    CHECK_EQ(player->GetComponent<HealthComponent>().healthPercentage, 80);
+    CHECK_EQ(player->GetComponent<HealthComponent>().health, 80);
+    CHECK_EQ(player->GetComponent<HealthComponent>().maxHealth, 120);
 
     auto enemies = world.registry.GetEntitiesByGroup("enemies");
     REQUIRE(enemies.size() == 1u);
-    CHECK_EQ(enemies[0].GetComponent<HealthComponent>().healthPercentage, 100);
+    CHECK_EQ(enemies[0].GetComponent<HealthComponent>().health, 100);
 }
 
-TEST(LuaLevelWithoutALevelTableFails)
+TEST(LuaSceneWithoutASceneTableFails)
 {
     LuaWorld world;
     CapturedErrors errors;
     CHECK(!world.Load("Something = {}"));
-    CHECK(errors.str().find("global table named Level") != std::string::npos);
+    CHECK(errors.str().find("global table named Scene") != std::string::npos);
 }
 
-TEST(MissingLevelFileFails)
+TEST(MissingSceneFileFails)
 {
     LuaWorld world;
     CapturedErrors errors;
-    CHECK(!LevelLoader::LoadLevel(999, world.lua, world.registry, world.assets, world.target.Renderer(), world.level));
-    CHECK(errors.str().find("Level999.lua") != std::string::npos);
+    CHECK(!world.loader.LoadFile("./nope/missing.lua", world.lua, world.registry, world.assets,
+                                 world.target.Renderer(), world.level));
+    CHECK(errors.str().find("missing.lua") != std::string::npos);
 }
 
 TEST(LuaLevelWarnsAboutTyposAndWrongTypesButKeepsGoing)
@@ -141,37 +151,72 @@ TEST(LuaLevelWarnsAboutTyposAndWrongTypesButKeepsGoing)
     LuaWorld world;
     CapturedErrors errors;
     REQUIRE(world.Load(R"(
-        Level = { entities = {
+        Scene = { entities = {
             { tag = "thing", components = {
                 transfrom = {},
-                health = { health_percentage = "lots" },
+                health = { max_health = "lots", max_helth = 5 },
+                sprite = { width = 8, z_idx = 2 },
+            }, compnents = {
             } },
         } }
     )"));
-    CHECK(errors.str().find("entities[1] has unknown component 'transfrom'") != std::string::npos);
-    CHECK(errors.str().find("entities[1].health.health_percentage should be a number") != std::string::npos);
+    CHECK(errors.str().find("entities[1]: unknown component 'transfrom'") != std::string::npos);
+    CHECK(errors.str().find("entities[1].health: max_health should be a number") != std::string::npos);
+    CHECK(errors.str().find("entities[1].health: unknown field 'max_helth'") != std::string::npos);
+    CHECK(errors.str().find("entities[1].sprite: unknown field 'z_idx'") != std::string::npos);
+    CHECK(errors.str().find("entities[1]: unknown field 'compnents'") != std::string::npos);
     auto thing = world.registry.GetEntityByTag("thing");
     REQUIRE(thing.has_value());
-    CHECK_EQ(thing->GetComponent<HealthComponent>().healthPercentage, 100);
+    CHECK_EQ(thing->GetComponent<HealthComponent>().maxHealth, 100);
+}
+
+TEST(RegisteringABuiltInNameReplacesItsLoader)
+{
+    LuaWorld world;
+    world.loader.RegisterComponent("health", [](const TableReader &fields, Entity entity) {
+        entity.AddComponent<HealthComponent>(fields.Int("hit_points", 1) * 10, 1000);
+    });
+    REQUIRE(world.Load(R"(Scene = { entities = { { tag = "tough", components = { health = { hit_points = 7 } } } } })"));
+    const auto &health = world.registry.GetEntityByTag("tough")->GetComponent<HealthComponent>();
+    CHECK_EQ(health.health, 70);
+    CHECK_EQ(health.maxHealth, 1000);
+}
+
+TEST(ANestedListOfEntitiesIsReported)
+{
+    LuaWorld world;
+    CapturedErrors errors;
+    REQUIRE(world.Load(R"(
+        Scene = { entities = {
+            { components = { transform = {} } },
+            { { components = { transform = {} } }, { components = { transform = {} } } },
+        } }
+    )"));
+    CHECK(errors.str().find("entities[2]: has list items") != std::string::npos);
+    CHECK(errors.str().find("entities[1]") == std::string::npos);
 }
 
 TEST(LuaLevelReadsTheTilemapAndMapSize)
 {
     LuaWorld world;
     REQUIRE(world.Load(R"(
-        Level = { tilemap = { map_file = "./assets/tilemaps/jungle.map", texture_id = "tiles", tile_size = 32, scale = 2 } }
+        Scene = { tilemap = { map_file = "./assets/tilemaps/jungle.map", texture_id = "tiles", tile_size = 32, scale = 2 } }
     )"));
-    CHECK_EQ(world.level.mapWidth, 1600);
-    CHECK_EQ(world.level.mapHeight, 1280);
-    CHECK_EQ(world.registry.GetEntitiesByGroup("tiles").size() + world.registry.GetEntitiesByGroup("obstacles").size(),
-             500u);
+    CHECK_EQ(world.level.worldWidth, 1600);
+    CHECK_EQ(world.level.worldHeight, 1280);
+    CHECK_EQ(world.registry.AddSystem<SpriteCounter>().GetEntities().size(), 0u);
+    world.registry.Update();
+    CHECK_EQ(world.registry.GetSystem<SpriteCounter>().GetEntities().size(), 500u);
+    CHECK_EQ(world.registry.AddSystem<SolidCounter>().GetEntities().size(), 0u);
+    world.registry.Update();
+    CHECK_EQ(world.registry.GetSystem<SolidCounter>().GetEntities().size(), 86u);
 }
 
 TEST(LuaLevelWithAMissingMapFileFails)
 {
     LuaWorld world;
     CapturedErrors errors;
-    CHECK(!world.Load(R"(Level = { tilemap = { map_file = "./nope.map" } })"));
+    CHECK(!world.Load(R"(Scene = { tilemap = { map_file = "./nope.map" } })"));
     CHECK(errors.str().find("nope.map") != std::string::npos);
 }
 
@@ -179,7 +224,7 @@ TEST(ScriptsRunEveryFrameWithDeltaTimeAndElapsedTime)
 {
     LuaWorld world;
     REQUIRE(world.Load(R"(
-        Level = { entities = {
+        Scene = { entities = {
             { tag = "mover", components = {
                 rigidbody = {},
                 script = function(entity, delta_time, elapsed_ms)
@@ -204,7 +249,7 @@ TEST(BrokenScriptReportsOnceAndOthersKeepRunning)
     LuaWorld world;
     CapturedErrors errors;
     REQUIRE(world.Load(R"(
-        Level = { entities = {
+        Scene = { entities = {
             { components = { script = function() error("boom") end } },
             { components = { script = function() good_calls = (good_calls or 0) + 1 end } },
         } }
@@ -226,7 +271,7 @@ TEST(BindingsReadAndWriteComponents)
 {
     LuaWorld world;
     REQUIRE(world.Load(R"(
-        Level = { entities = {
+        Scene = { entities = {
             { tag = "target", components = {
                 transform = { position = { x = 3, y = 4 } },
                 sprite = { width = 16, height = 16 },
@@ -277,22 +322,4 @@ TEST(ScriptsCannotReachAKilledEntityThroughAStaleHandle)
     CHECK(world.GlobalIsNil("stale"));
     CHECK(!DecodeEntity(EncodeEntity(first), world.registry).has_value());
     CHECK(DecodeEntity(EncodeEntity(reused), world.registry) == reused);
-}
-
-TEST(TheShippedLevelOneLoadsWithoutWarnings)
-{
-    LuaWorld world;
-    CapturedErrors errors;
-    const bool loaded =
-        LevelLoader::LoadLevel(1, world.lua, world.registry, world.assets, world.target.Renderer(), world.level);
-    world.registry.Update();
-    const std::string warnings = errors.str();
-    CHECK(loaded);
-    CHECK_EQ(warnings, std::string(""));
-    CHECK(world.registry.GetEntityByTag("player").has_value());
-    CHECK(world.registry.GetEntityByTag("status-label").has_value());
-    CHECK_EQ(world.registry.GetEntitiesByGroup("enemies").size(), 6u);
-    CHECK_EQ(world.level.mapWidth, 1600);
-    world.scripts->Update(0.016f, 1000);
-    CHECK_EQ(errors.str(), warnings);
 }

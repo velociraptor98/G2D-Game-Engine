@@ -2,7 +2,7 @@
 #include "./SDLTestHelpers.h"
 #include <SDL2/SDL_mixer.h>
 #include "ECS/ECS.h"
-#include "AssetManager.h"
+#include "Assets/AssetManager.h"
 #include "Components/AudioComponent.h"
 #include "Systems/AudioSystem.h"
 

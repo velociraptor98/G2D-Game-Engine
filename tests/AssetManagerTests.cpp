@@ -1,6 +1,6 @@
 #include "./TestFramework.h"
 #include "./SDLTestHelpers.h"
-#include "AssetManager.h"
+#include "Assets/AssetManager.h"
 
 TEST(AssetManagerLoadsTextureFromDisk)
 {

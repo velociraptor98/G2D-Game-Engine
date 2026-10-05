@@ -2,8 +2,7 @@
 #include "./SDLTestHelpers.h"
 #include <cstdlib>
 #include "ECS/ECS.h"
-#include "AssetManager.h"
-#include "GameRules.h"
+#include "Assets/AssetManager.h"
 #include "Components/TransformComponent.h"
 #include "Components/SpriteComponent.h"
 #include "Components/HealthComponent.h"
@@ -125,7 +124,7 @@ TEST(HealthBarWidthAndColourFollowHealth)
     Entity entity = registry.CreateEntity();
     entity.AddComponent<TransformComponent>(glm::vec2(10.0f, 10.0f), glm::vec2(2.0f, 2.0f));
     entity.AddComponent<SpriteComponent>("tank", 16, 8);
-    entity.AddComponent<HealthComponent>(50);
+    entity.AddComponent<HealthComponent>(50, 100);
     registry.Update();
 
     render.Render(target.Renderer(), SDL_Rect{0, 0, 64, 64});
@@ -138,6 +137,30 @@ TEST(HealthBarWidthAndColourFollowHealth)
     CHECK_EQ(target.PixelAt(10, barY - 1), BLACK);
 }
 
+TEST(HealthBarUsesTheShareOfMaxHealthAndCanBeHidden)
+{
+    SoftwareRenderTarget target(64, 64);
+    REQUIRE(target.IsValid());
+    Registry registry;
+    auto &render = registry.AddSystem<RenderHealthBarSystem>();
+    Entity tough = registry.CreateEntity();
+    tough.AddComponent<TransformComponent>(glm::vec2(0.0f, 0.0f));
+    tough.AddComponent<SpriteComponent>("tank", 40, 8);
+    tough.AddComponent<HealthComponent>(100, 400);
+    Entity hidden = registry.CreateEntity();
+    hidden.AddComponent<TransformComponent>(glm::vec2(0.0f, 30.0f));
+    hidden.AddComponent<SpriteComponent>("tank", 40, 8);
+    hidden.AddComponent<HealthComponent>(100, 100, false);
+    registry.Update();
+
+    render.Render(target.Renderer(), SDL_Rect{0, 0, 64, 64});
+    target.Present();
+    const int barY = 8 + RenderHealthBarSystem::BAR_GAP;
+    CHECK(!(target.PixelAt(9, barY) == BLACK));
+    CHECK_EQ(target.PixelAt(10, barY), BLACK);
+    CHECK_EQ(target.PixelAt(0, 30 + barY), BLACK);
+}
+
 TEST(HealthBarColourBands)
 {
     CHECK_EQ(static_cast<int>(HealthBarColor(100).g), 200);
@@ -145,22 +168,4 @@ TEST(HealthBarColourBands)
     CHECK_EQ(static_cast<int>(HealthBarColor(70).r), 230);
     CHECK_EQ(static_cast<int>(HealthBarColor(41).r), 230);
     CHECK_EQ(static_cast<int>(HealthBarColor(40).g), 0);
-}
-
-TEST(MissionStatusTracksPlayerAndEnemies)
-{
-    Registry registry;
-    CHECK_EQ(MissionStatus(registry), std::string("GAME OVER"));
-    Entity player = registry.CreateEntity();
-    player.Tag("player");
-    CHECK_EQ(MissionStatus(registry), std::string("MISSION COMPLETE"));
-    Entity enemy = registry.CreateEntity();
-    enemy.Group("enemies");
-    CHECK_EQ(MissionStatus(registry), std::string(""));
-    enemy.Kill();
-    CHECK_EQ(MissionStatus(registry), std::string("MISSION COMPLETE"));
-    player.Kill();
-    CHECK_EQ(MissionStatus(registry), std::string("GAME OVER"));
-    registry.Update();
-    CHECK_EQ(MissionStatus(registry), std::string("GAME OVER"));
 }

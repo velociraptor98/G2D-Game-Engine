@@ -9,6 +9,8 @@
 #include "Components/KeyboardControlledComponent.h"
 #include "Systems/KeyboardControlSystem.h"
 #include "Systems/MovementSystem.h"
+#include "Systems/WorldBoundsSystem.h"
+#include "Components/StayInBoundsComponent.h"
 
 namespace
 {
@@ -23,7 +25,8 @@ namespace
         {
             entity.AddComponent<RigidBodyComponent>();
             entity.AddComponent<SpriteComponent>("chopper", 32, 32);
-            entity.AddComponent<KeyboardControlledComponent>(100.0f);
+            auto &control = entity.AddComponent<KeyboardControlledComponent>(100.0f);
+            control.spriteRows = {3, 0, 2, 1};
             registry.Update();
         }
         void Press(std::initializer_list<SDL_Scancode> pressed)
@@ -93,23 +96,60 @@ TEST(OpposingKeysCancelOut)
     CHECK_EQ(player.Velocity().x, 0.0f);
 }
 
-TEST(PlayerIsKeptInsideTheMapButOthersAreNot)
+TEST(SpriteRowIsLeftAloneWhenNoRowsAreConfigured)
+{
+    ControlledPlayer player;
+    player.entity.GetComponent<KeyboardControlledComponent>().spriteRows.fill(KeyboardControlledComponent::NO_SPRITE_ROW);
+    player.entity.GetComponent<SpriteComponent>().srcRect.y = 64;
+    player.Press({SDL_SCANCODE_LEFT});
+    CHECK_EQ(player.Row(), 2);
+    CHECK_EQ(player.Velocity().x, -100.0f);
+}
+
+TEST(CustomKeyBindingsReplaceTheDefaults)
+{
+    ControlledPlayer player;
+    auto &keys = player.entity.GetComponent<KeyboardControlledComponent>().keys;
+    keys[static_cast<int>(Direction::Right)] = {SDL_SCANCODE_L};
+    player.Press({SDL_SCANCODE_RIGHT});
+    CHECK_EQ(player.Velocity().x, 0.0f);
+    player.Press({SDL_SCANCODE_L});
+    CHECK_EQ(player.Velocity().x, 100.0f);
+}
+
+TEST(KeyboardControlWorksWithoutASprite)
+{
+    Registry registry;
+    auto &system = registry.AddSystem<KeyboardControlSystem>();
+    Entity entity = registry.CreateEntity();
+    entity.AddComponent<RigidBodyComponent>();
+    entity.AddComponent<KeyboardControlledComponent>(10.0f);
+    registry.Update();
+    std::vector<Uint8> keys(SDL_NUM_SCANCODES, 0);
+    keys[SDL_SCANCODE_DOWN] = 1;
+    system.Update(keys.data());
+    CHECK_EQ(entity.GetComponent<RigidBodyComponent>().velocity.y, 10.0f);
+}
+
+TEST(StayInBoundsKeepsTheSpriteInsideTheWorldButOthersCanLeave)
 {
     Registry registry;
     auto &movement = registry.AddSystem<MovementSystem>();
-    Entity player = registry.CreateEntity();
-    player.AddComponent<TransformComponent>(glm::vec2(90.0f, 5.0f), glm::vec2(2.0f, 2.0f));
-    player.AddComponent<RigidBodyComponent>(glm::vec2(100.0f, -100.0f));
-    player.AddComponent<SpriteComponent>("chopper", 8, 8);
-    player.Tag("player");
-    Entity other = registry.CreateEntity();
-    other.AddComponent<TransformComponent>(glm::vec2(90.0f, 5.0f));
-    other.AddComponent<RigidBodyComponent>(glm::vec2(100.0f, -100.0f));
+    auto &bounds = registry.AddSystem<WorldBoundsSystem>();
+    Entity bounded = registry.CreateEntity();
+    bounded.AddComponent<TransformComponent>(glm::vec2(90.0f, 5.0f), glm::vec2(2.0f, 2.0f));
+    bounded.AddComponent<RigidBodyComponent>(glm::vec2(100.0f, -100.0f));
+    bounded.AddComponent<SpriteComponent>("chopper", 8, 8);
+    bounded.AddComponent<StayInBoundsComponent>();
+    Entity free = registry.CreateEntity();
+    free.AddComponent<TransformComponent>(glm::vec2(90.0f, 5.0f));
+    free.AddComponent<RigidBodyComponent>(glm::vec2(100.0f, -100.0f));
     registry.Update();
 
-    movement.Update(1.0f, 100, 100);
-    CHECK_EQ(player.GetComponent<TransformComponent>().position.x, 84.0f);
-    CHECK_EQ(player.GetComponent<TransformComponent>().position.y, 0.0f);
-    CHECK_EQ(other.GetComponent<TransformComponent>().position.x, 190.0f);
-    CHECK_EQ(other.GetComponent<TransformComponent>().position.y, -95.0f);
+    movement.Update(1.0f);
+    bounds.Update(100, 100);
+    CHECK_EQ(bounded.GetComponent<TransformComponent>().position.x, 84.0f);
+    CHECK_EQ(bounded.GetComponent<TransformComponent>().position.y, 0.0f);
+    CHECK_EQ(free.GetComponent<TransformComponent>().position.x, 190.0f);
+    CHECK_EQ(free.GetComponent<TransformComponent>().position.y, -95.0f);
 }

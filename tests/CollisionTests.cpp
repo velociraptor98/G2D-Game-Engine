@@ -11,6 +11,9 @@
 #include "Systems/CollisionSystem.h"
 #include "Systems/RenderColliderSystem.h"
 #include "Systems/MovementSystem.h"
+#include "Systems/CollisionResponseSystem.h"
+#include "Components/SolidComponent.h"
+#include "Components/CollisionResponseComponent.h"
 
 namespace
 {
@@ -112,28 +115,29 @@ namespace
         EventBus eventBus;
         MovementSystem *movement = &registry.AddSystem<MovementSystem>();
         CollisionSystem *collision = &registry.AddSystem<CollisionSystem>();
+        CollisionResponseSystem *response = &registry.AddSystem<CollisionResponseSystem>();
         Entity enemy = registry.CreateEntity();
 
-        BounceWorld(glm::vec2 velocity)
+        BounceWorld(glm::vec2 velocity, SolidResponse onSolid = SolidResponse::Bounce)
         {
-            movement->SubscribeToEvents(eventBus);
+            response->SubscribeToEvents(eventBus);
             enemy.AddComponent<TransformComponent>(glm::vec2(0.0f, 0.0f));
             enemy.AddComponent<RigidBodyComponent>(velocity);
             enemy.AddComponent<SpriteComponent>("tank", 10, 10);
             enemy.AddComponent<BoxColliderComponent>(10, 10);
-            enemy.Group("enemies");
+            enemy.AddComponent<CollisionResponseComponent>(onSolid, true);
         }
         void Wall(float x, float y)
         {
             Entity wall = registry.CreateEntity();
             wall.AddComponent<TransformComponent>(glm::vec2(x, y));
             wall.AddComponent<BoxColliderComponent>(10, 10);
-            wall.Group("obstacles");
+            wall.AddComponent<SolidComponent>();
         }
         void Step(float deltaTime)
         {
             registry.Update();
-            movement->Update(deltaTime, 1000, 1000);
+            movement->Update(deltaTime);
             collision->Update(eventBus);
         }
         glm::vec2 Velocity() { return enemy.GetComponent<RigidBodyComponent>().velocity; }
@@ -173,13 +177,67 @@ TEST(VerticalBounceDoesNotFlipTheSprite)
     CHECK(world.enemy.GetComponent<SpriteComponent>().flip == SDL_FLIP_NONE);
 }
 
-TEST(NonEnemiesPassThroughObstacles)
+TEST(EntitiesWithoutAResponsePassThroughSolids)
 {
     BounceWorld world(glm::vec2(10.0f, 0.0f));
-    world.enemy.Group("projectiles");
+    world.enemy.RemoveComponent<CollisionResponseComponent>();
     world.Wall(15.0f, 0.0f);
     world.Step(0.6f);
+    world.Step(0.6f);
     CHECK_EQ(world.Velocity().x, 10.0f);
+    CHECK(world.enemy.IsAlive());
+}
+
+TEST(BounceDoesNotFlipTheSpriteUnlessAskedTo)
+{
+    BounceWorld world(glm::vec2(10.0f, 0.0f));
+    world.enemy.GetComponent<CollisionResponseComponent>().flipSpriteOnBounce = false;
+    world.Wall(15.0f, 0.0f);
+    world.Step(0.6f);
+    CHECK_EQ(world.Velocity().x, -10.0f);
+    CHECK(world.enemy.GetComponent<SpriteComponent>().flip == SDL_FLIP_NONE);
+}
+
+TEST(NonSolidCollidersDoNotTriggerResponses)
+{
+    BounceWorld world(glm::vec2(10.0f, 0.0f));
+    Entity ghost = world.registry.CreateEntity();
+    ghost.AddComponent<TransformComponent>(glm::vec2(15.0f, 0.0f));
+    ghost.AddComponent<BoxColliderComponent>(10, 10);
+    world.Step(0.6f);
+    CHECK_EQ(world.Velocity().x, 10.0f);
+}
+
+TEST(DestroyResponseKillsTheMoverOnASolid)
+{
+    BounceWorld world(glm::vec2(10.0f, 0.0f), SolidResponse::Destroy);
+    world.Wall(15.0f, 0.0f);
+    world.Step(0.6f);
+    CHECK(!world.enemy.IsAlive());
+}
+
+TEST(BlockResponsePushesOutAlongTheShallowAxisAndStopsThatVelocity)
+{
+    BounceWorld world(glm::vec2(10.0f, 3.0f), SolidResponse::Block);
+    world.Wall(15.0f, -20.0f);
+    world.Wall(15.0f, -10.0f);
+    world.Wall(15.0f, 0.0f);
+    world.Wall(15.0f, 10.0f);
+    world.Step(0.7f);
+    const auto &transform = world.enemy.GetComponent<TransformComponent>();
+    CHECK_EQ(transform.position.x, 5.0f);
+    CHECK_EQ(world.Velocity().x, 0.0f);
+    CHECK_EQ(world.Velocity().y, 3.0f);
+}
+
+TEST(BlockResponseKeepsVelocityThatPointsAwayFromTheSolid)
+{
+    BounceWorld world(glm::vec2(0.0f, 0.0f), SolidResponse::Block);
+    world.Wall(8.0f, 0.0f);
+    world.enemy.GetComponent<RigidBodyComponent>().velocity = glm::vec2(-5.0f, 0.0f);
+    world.Step(0.0f);
+    CHECK_EQ(world.enemy.GetComponent<TransformComponent>().position.x, -2.0f);
+    CHECK_EQ(world.Velocity().x, -5.0f);
 }
 
 TEST(RenderColliderSystemOutlinesCollidersRelativeToTheCamera)

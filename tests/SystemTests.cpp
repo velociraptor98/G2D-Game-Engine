@@ -1,7 +1,7 @@
 #include "./TestFramework.h"
 #include "./SDLTestHelpers.h"
 #include "ECS/ECS.h"
-#include "AssetManager.h"
+#include "Assets/AssetManager.h"
 #include "Components/TransformComponent.h"
 #include "Components/RigidBodyComponent.h"
 #include "Components/SpriteComponent.h"
@@ -17,7 +17,7 @@ TEST(MovementSystemAppliesVelocityScaledByDeltaTime)
     entity.AddComponent<RigidBodyComponent>(glm::vec2(100.0f, -50.0f));
     registry.Update();
 
-    movement.Update(0.5f, 10000, 10000);
+    movement.Update(0.5f);
     const auto &transform = entity.GetComponent<TransformComponent>();
     CHECK_EQ(transform.position.x, 60.0f);
     CHECK_EQ(transform.position.y, -5.0f);
@@ -31,7 +31,7 @@ TEST(MovementSystemIgnoresEntitiesWithoutRigidBody)
     entity.AddComponent<TransformComponent>(glm::vec2(10.0f, 20.0f));
     registry.Update();
 
-    movement.Update(1.0f, 10000, 10000);
+    movement.Update(1.0f);
     CHECK(movement.GetEntities().empty());
     CHECK_EQ(entity.GetComponent<TransformComponent>().position.x, 10.0f);
 }
