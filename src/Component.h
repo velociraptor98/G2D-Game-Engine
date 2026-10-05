@@ -1,11 +1,10 @@
 #ifndef COMPONENT_H
 #define COMPONENT_H
-#include "./Entity.h"
 class Entity;
 class Component
 {
     public :
-    Entity* owner;
+    Entity* owner = nullptr;
     virtual ~Component() {}
     virtual void init(){};
     virtual void Update(float deltaTime){};

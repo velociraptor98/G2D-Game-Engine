@@ -2,23 +2,27 @@
 #define ENTITY_H
 #include <vector>
 #include <string>
-#include "./EntityManager.h"
-#include "./Component.h"
 #include <map>
+#include <typeindex>
 #include <iostream>
+#include "./Component.h"
 class EntityManager;
-class Component;
 class Entity
 {
 private:
     EntityManager &manager;
     bool isActive;
     std::vector<Component *> components;
-    std::map<const std::type_info*,Component*> componentTypeMap;
+    // type_index rather than &typeid(T): type_info addresses aren't guaranteed
+    // unique across translation units, so pointer keys can miss on some platforms.
+    std::map<std::type_index,Component*> componentTypeMap;
 public:
     std::string name;
     Entity(EntityManager &manager);
     Entity(EntityManager &manager, std::string name);
+    ~Entity();
+    Entity(const Entity&) = delete;
+    Entity& operator=(const Entity&) = delete;
     void Update(float deltaTime);
     void Render();
     void Destroy();
@@ -29,24 +33,24 @@ public:
         T *newComponent(new T(std::forward<TArgs>(args)...));
         newComponent->owner = this;
         components.emplace_back(newComponent);
-        componentTypeMap[&typeid(*newComponent)] = newComponent;
+        componentTypeMap[std::type_index(typeid(T))] = newComponent;
         newComponent->init();
         return *newComponent;
     }
     template <typename T>
     T* getComponent()
     {
-        return static_cast<T*>(componentTypeMap[&typeid(T)]);
+        auto it = componentTypeMap.find(std::type_index(typeid(T)));
+        return it == componentTypeMap.end() ? nullptr : static_cast<T*>(it->second);
     }
     void getAllComponents(){
-        // use the component map for entities
         for(auto const& x : componentTypeMap){
-            std::cout<<x.first<<" : "<<x.second<<std::endl;
+            std::cout<<x.first.name()<<" : "<<x.second<<std::endl;
         }
     }
     template <typename T>
     bool hasComponent() const{
-        return componentTypeMap.count(&typeid(T));
+        return componentTypeMap.count(std::type_index(typeid(T))) > 0;
     }
 };
 #endif

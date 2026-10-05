@@ -1,5 +1,13 @@
 #include "./EntityManager.h"
 
+EntityManager::~EntityManager()
+{
+    for(auto& entity : entities)
+    {
+        delete entity;
+    }
+}
+
 void EntityManager::Clear()
 {
     for(auto& entity : entities)

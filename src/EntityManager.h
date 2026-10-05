@@ -3,12 +3,12 @@
 #include "./Entity.h"
 #include "./Component.h"
 #include <vector>
-class Entity;
 class EntityManager
 {
     private:
     std::vector<Entity*> entities;
     public:
+    ~EntityManager();
     void Clear();
     void Update(float deltaTime);
     void Render();

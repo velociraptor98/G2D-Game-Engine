@@ -1,19 +1,15 @@
+CXX := clang++
+CXXFLAGS := -std=c++17 -Wall -Wfatal-errors -g
+SDL_PKGS := sdl2 SDL2_image SDL2_ttf SDL2_mixer
+SDL_CFLAGS := $(shell pkg-config --cflags $(SDL_PKGS))
+SDL_LIBS := $(shell pkg-config --libs $(SDL_PKGS))
+TARGET := game
+
 build:
-	g++ -w -std=c++14 -Wfatal-errors -m32 -static-libstdc++ \
-	./src/*.cpp \
-	-o game.exe \
-	-IC:\SDLLIBS\SDLLIB\SDL2\include \
-	-LC:\SDLLIBS\SDLLIB\SDL2\lib \
-	-I.\lib\lua \
-	-L.\lib\lua \
-	-llua53 \
-	-lmingw32 \
-	-lSDL2main \
-	-lSDL2_image \
-	-lSDL2_ttf \
-	-lSDL2_mixer \
-	-lSDL2
+	$(CXX) $(CXXFLAGS) ./src/*.cpp -o $(TARGET) $(SDL_CFLAGS) $(SDL_LIBS)
 clean:
-	del game.exe
-run:
-	game.exe
+	rm -f $(TARGET)
+run: build
+	./$(TARGET)
+
+.PHONY: build clean run

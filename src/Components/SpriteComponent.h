@@ -5,23 +5,26 @@
 #include "../TextureManager.h"
 #include "../AssetManager.h"
 #include "./TransformComponent.h"
+#include "../Animation.h"
+#include <map>
+#include <string>
 class SpriteComponent : public Component {
     private:
-    TransformComponent* transform;
-    SDL_Texture* texture;
-    SDL_Rect sourceRectangle;
-    SDL_Rect destinationRectangle;
-    bool isAnimated;
-    int numFrame;
-    int animationSpeed;
-    bool isFixed;
+    TransformComponent* transform = nullptr;
+    SDL_Texture* texture = nullptr;
+    SDL_Rect sourceRectangle{0,0,0,0};
+    SDL_Rect destinationRectangle{0,0,0,0};
+    bool isAnimated = false;
+    int numFrame = 0;
+    int animationSpeed = 0;
+    bool isFixed = false;
     std::map<std::string,Animation> animations;
     std::string currentAnimationName;
-    unsigned int animationIndex;
+    unsigned int animationIndex = 0;
     public:
     SDL_RendererFlip spriteFlip = SDL_FLIP_NONE;
-    SpriteComponent(const char* filePath){
-        setTexture(filePath);
+    SpriteComponent(std::string assetTextureId){
+        setTexture(assetTextureId);
     }
     void setTexture(std::string assetTextureId){
         texture = Game::assetManager->getTexture(assetTextureId);

@@ -7,6 +7,13 @@ Entity::Entity(EntityManager& manager,std::string name): manager(manager),name(n
 {
 this->isActive = true;
 }
+Entity::~Entity()
+{
+    for(auto& component:components)
+    {
+        delete component;
+    }
+}
 void Entity::Update(float deltaTime)
 {
     for(auto& component:components)

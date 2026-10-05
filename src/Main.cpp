@@ -13,5 +13,6 @@ int main(int argc, char *argv[])
         game->Render();
     }
     game->Destroy();
+    delete game;
     return 0;
 }

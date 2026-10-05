@@ -11,10 +11,10 @@ class Game
     private:
     bool isRunning;
     SDL_Window* window;
-    
+
     public:
     static SDL_Renderer* renderer;
-    int ticksLastFrame;
+    Uint32 ticksLastFrame;
     static AssetManager* assetManager;
     Game();
     ~Game();

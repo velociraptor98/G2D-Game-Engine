@@ -1,20 +1,19 @@
 {
     "configurations": [
         {
-            "name": "Win32",
+            "name": "Mac",
             "includePath": [
-                "C:\\MinGW\\include"
+                "${workspaceFolder}/**",
+                "/opt/homebrew/include",
+                "/opt/homebrew/include/SDL2"
             ],
-            "defines": [
-                "_DEBUG",
-                "UNICODE",
-                "_UNICODE"
+            "macFrameworkPath": [
+                "/System/Library/Frameworks"
             ],
-            "windowsSdkVersion": "10.0.18362.0",
-            "compilerPath": "C:/Program Files (x86)/Microsoft Visual Studio/2019/Community/VC/Tools/MSVC/14.25.28610/bin/Hostx64/x64/cl.exe",
+            "compilerPath": "/usr/bin/clang++",
             "cStandard": "c11",
             "cppStandard": "c++17",
-            "intelliSenseMode": "msvc-x64"
+            "intelliSenseMode": "macos-clang-arm64"
         }
     ],
     "version": 4
