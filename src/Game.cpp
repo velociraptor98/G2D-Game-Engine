@@ -1,17 +1,34 @@
 #include "./Game.h"
 #include "./Constants.h"
 #include <iostream>
-#include "./Components/TransformComponent.h"
-#include "./Components/SpriteComponent.h"
-#include "./AssetManager.h"
-EntityManager manager;
-SDL_Renderer* Game::renderer = nullptr;
-AssetManager *Game::assetManager = new AssetManager(&manager);
+#include <SDL2/SDL_image.h>
+#include <SDL2/SDL_ttf.h>
+#include <SDL2/SDL_mixer.h>
+#include "./GameRules.h"
+#include "./Components/TextLabelComponent.h"
+#include "./Systems/MovementSystem.h"
+#include "./Systems/RenderSystem.h"
+#include "./Systems/AnimationSystem.h"
+#include "./Systems/CameraMovementSystem.h"
+#include "./Systems/KeyboardControlSystem.h"
+#include "./Systems/CollisionSystem.h"
+#include "./Systems/RenderColliderSystem.h"
+#include "./Systems/ProjectileEmitSystem.h"
+#include "./Systems/ProjectileLifecycleSystem.h"
+#include "./Systems/DamageSystem.h"
+#include "./Systems/RenderTextSystem.h"
+#include "./Systems/RenderHealthBarSystem.h"
+#include "./Systems/AudioSystem.h"
+#include "./Systems/ScriptSystem.h"
+#include "./Scripting/LuaBindings.h"
+#include "./Events/KeyPressedEvent.h"
 Game::Game()
+    : isRunning(false), window(nullptr), renderer(nullptr), ticksLastFrame(0),
+      registry(std::make_unique<Registry>()), assetManager(std::make_unique<AssetManager>()),
+      eventBus(std::make_unique<EventBus>()),
+      lua(luaL_newstate(), &lua_close),
+      camera{0, 0, static_cast<int>(WINDOW_WIDTH), static_cast<int>(WINDOW_HEIGHT)}, isDebug(false)
 {
-    (*this).isRunning = false; 
-    (*this).window = nullptr;
-    (*this).ticksLastFrame = 0;
 }
 Game::~Game()
 {
@@ -33,6 +50,15 @@ void Game::init(int width,int height)
         std::cerr<<"Error initializing SDL_image: "<<IMG_GetError()<<std::endl;
         return;
     }
+    if(TTF_Init()!=0)
+    {
+        std::cerr<<"Error initializing SDL_ttf: "<<TTF_GetError()<<std::endl;
+        return;
+    }
+    if(Mix_OpenAudio(44100,MIX_DEFAULT_FORMAT,2,2048)!=0)
+    {
+        std::cerr<<"Audio unavailable, continuing without sound: "<<Mix_GetError()<<std::endl;
+    }
     window  = SDL_CreateWindow(
         NULL,
         SDL_WINDOWPOS_CENTERED,
@@ -52,28 +78,43 @@ void Game::init(int width,int height)
         std::cerr<<"Failed to create renderer: "<<SDL_GetError()<<std::endl;
         return;
     }
-    LoadLevel(0);
+    registry->AddSystem<MovementSystem>();
+    registry->AddSystem<RenderSystem>();
+    registry->AddSystem<AnimationSystem>();
+    registry->AddSystem<CameraMovementSystem>();
+    registry->AddSystem<KeyboardControlSystem>();
+    registry->AddSystem<CollisionSystem>();
+    registry->AddSystem<RenderColliderSystem>();
+    registry->AddSystem<ProjectileEmitSystem>(*registry);
+    registry->AddSystem<ProjectileLifecycleSystem>();
+    registry->AddSystem<DamageSystem>();
+    registry->AddSystem<RenderTextSystem>();
+    registry->AddSystem<RenderHealthBarSystem>();
+    registry->AddSystem<AudioSystem>(*assetManager);
+    luaL_openlibs(lua.get());
+    RegisterLuaBindings(lua.get(),*registry);
+    registry->AddSystem<ScriptSystem>(lua.get());
+    registry->GetSystem<MovementSystem>().SubscribeToEvents(*eventBus);
+    registry->GetSystem<ProjectileEmitSystem>().SubscribeToEvents(*eventBus);
+    registry->GetSystem<DamageSystem>().SubscribeToEvents(*eventBus);
+    eventBus->Subscribe<KeyPressedEvent>([this](KeyPressedEvent &event) {
+        if(event.symbol == SDLK_c)
+        {
+            isDebug = !isDebug;
+        }
+    });
+    if(!LoadLevel(1))
+    {
+        return;
+    }
     ticksLastFrame = SDL_GetTicks();
     isRunning = true;
     return;
 }
 
-void Game::LoadLevel(int levelNumber)
+bool Game::LoadLevel(int levelNumber)
 {
-    //Load Assets
-    std::string textureFilePath = "./assets/images/tank-big-right.png";
-    // Can be added to single line
-    assetManager->addTexture("tank-image",textureFilePath.c_str());
-    assetManager->addTexture("chopper-image",std::string("./assets/images/chopper-spritesheet.png").c_str());
-    // Include entities and components
-    Entity& tankEntity(manager.AddEntity("tank"));
-    tankEntity.AddComponents<TransformComponent>(0,0,20,20,32,32,1);
-    tankEntity.AddComponents<SpriteComponent>("tank-image");
-    //chopper entity
-    Entity& chopperEntity(manager.AddEntity("chopper"));
-    chopperEntity.AddComponents<TransformComponent>(240,106,20,20,32,32,1);
-    chopperEntity.AddComponents<SpriteComponent>("chopper-image");
-    //Just for debugging purposes
+    return LevelLoader::LoadLevel(levelNumber,lua.get(),*registry,*assetManager,renderer,level);
 }
 void Game::ProcessInput()
 {
@@ -89,6 +130,10 @@ void Game::ProcessInput()
             if(event.key.keysym.sym == SDLK_ESCAPE)
             {
                 isRunning =false;
+            }
+            if(!event.key.repeat)
+            {
+                eventBus->Emit<KeyPressedEvent>(event.key.keysym.sym);
             }
             break;
             default:
@@ -108,22 +153,38 @@ void Game::Update()
     //Clamping the delta time 
     deltaTime = (deltaTime>0.05f)?0.05f : deltaTime;
     ticksLastFrame = SDL_GetTicks();
-    manager.Update(deltaTime);
-
+    registry->Update();
+    registry->GetSystem<KeyboardControlSystem>().Update(SDL_GetKeyboardState(nullptr));
+    registry->GetSystem<ScriptSystem>().Update(deltaTime,SDL_GetTicks());
+    registry->GetSystem<MovementSystem>().Update(deltaTime,level.mapWidth,level.mapHeight);
+    registry->GetSystem<CollisionSystem>().Update(*eventBus);
+    registry->GetSystem<ProjectileEmitSystem>().Update(SDL_GetTicks());
+    registry->GetSystem<ProjectileLifecycleSystem>().Update(SDL_GetTicks());
+    if(auto status = registry->GetEntityByTag("status-label"))
+    {
+        status->GetComponent<TextLabelComponent>().text = MissionStatus(*registry);
+    }
+    registry->GetSystem<AudioSystem>().Update();
+    registry->GetSystem<AnimationSystem>().Update(SDL_GetTicks());
+    registry->GetSystem<CameraMovementSystem>().Update(camera,level.mapWidth,level.mapHeight);
 }
 void Game::Render()
 {
     SDL_SetRenderDrawColor(renderer,21,21,21,255);
     SDL_RenderClear(renderer);
-    if(manager.hasEntities())
+    registry->GetSystem<RenderSystem>().Render(renderer,*assetManager,camera);
+    registry->GetSystem<RenderHealthBarSystem>().Render(renderer,camera);
+    registry->GetSystem<RenderTextSystem>().Render(renderer,*assetManager,camera);
+    if(isDebug)
     {
-        manager.Render();
+        registry->GetSystem<RenderColliderSystem>().Render(renderer,camera);
     }
     SDL_RenderPresent(renderer);
 }
 void Game::Destroy()
 {
-    assetManager->clearData();
+    assetManager->ClearAssets();
+    Mix_CloseAudio();
     if(renderer)
     {
         SDL_DestroyRenderer(renderer);
@@ -134,6 +195,7 @@ void Game::Destroy()
         SDL_DestroyWindow(window);
         window = nullptr;
     }
+    TTF_Quit();
     IMG_Quit();
     SDL_Quit();
 }

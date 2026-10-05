@@ -1,26 +1,33 @@
 #ifndef GAME_H
 #define GAME_H
 #include <SDL2/SDL.h>
-#include<SDL2/SDL_image.h>
-#include<SDL2/SDL_ttf.h>
-#include "../lib/glm/glm.hpp"
-#include "./EntityManager.h"
-class AssetManager;
+#include <memory>
+#include <lua.hpp>
+#include "./ECS/ECS.h"
+#include "./AssetManager.h"
+#include "./LevelLoader.h"
+#include "./EventBus/EventBus.h"
 class Game
 {
     private:
     bool isRunning;
     SDL_Window* window;
+    SDL_Renderer* renderer;
+    Uint32 ticksLastFrame;
+    std::unique_ptr<Registry> registry;
+    std::unique_ptr<AssetManager> assetManager;
+    std::unique_ptr<EventBus> eventBus;
+    std::unique_ptr<lua_State, decltype(&lua_close)> lua;
+    SDL_Rect camera;
+    LevelInfo level;
+    bool isDebug;
 
     public:
-    static SDL_Renderer* renderer;
-    Uint32 ticksLastFrame;
-    static AssetManager* assetManager;
     Game();
     ~Game();
     bool IsRunning() const;
     void init(int width,int height);
-    void LoadLevel(int levelNumber);
+    bool LoadLevel(int levelNumber);
     void ProcessInput();
     void Update();
     void Render();

@@ -1,3 +1,4 @@
 game
 *.dSYM/
 .DS_Store
+run_tests
